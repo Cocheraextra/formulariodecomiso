@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Formulario de Decomiso - Logística</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/signature_pad@4.1.7/dist/signature_pad.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #f1f5f9; color: #0f172a; margin: 0; }
+        .app-container { max-width: 480px; margin: 0 auto; background: white; min-height: 100vh; display: flex; flex-direction: column; box-shadow: 0 0 50px rgba(0,0,0,0.1); }
+        .input-group { background: #f8fafc; border: 2px solid #e2e8f0; padding: 1rem; border-radius: 16px; width: 100%; font-weight: 600; outline: none; transition: all 0.2s; }
+        .input-group:focus { border-color: #2563eb; background: white; }
+        .btn-main { background: #2563eb; color: white; padding: 1.2rem; border-radius: 18px; font-weight: 800; width: 100%; text-transform: uppercase; transition: all 0.2s; border: none; cursor: pointer; }
+        .btn-main:disabled { background: #94a3b8; cursor: not-allowed; }
+        .signature-canvas { border: 2px dashed #cbd5e1; border-radius: 20px; background: #fcfcfc; width: 100%; height: 220px; touch-action: none; }
+        .mat-tag { background: #1e293b; color: white; padding: 8px 14px; border-radius: 12px; font-size: 11px; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+        .loader { width: 30px; height: 30px; border: 3px solid #f3f3f3; border-top: 3px solid #2563eb; border-radius: 50%; animation: spin 1s linear infinite; display: inline-block; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <!-- VISTA LOGIN -->
+        <div id="view-login" class="flex-1 flex flex-col p-8 justify-center">
+            <div class="text-center mb-10">
+                <h1 class="text-3xl font-black italic tracking-tighter text-slate-900 uppercase leading-none">FORMULARIO DE<br><span class="text-blue-600">DECOMISO</span></h1>
+                <p class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Logística de Autorización</p>
+            </div>
+            <div class="space-y-4 bg-slate-50 p-6 rounded-[2rem] border border-slate-100">
+                <select id="login-role" class="input-group">
+                    <option value="1">1. DESPACHO (INICIO)</option>
+                    <option value="2">2. GERENCIA (AUTORIZA)</option>
+                    <option value="3">3. PREVENCIÓN (SALIDA)</option>
+                    <option value="admin">99. ADMINISTRADOR</option>
+                </select>
+                <input type="password" id="login-pin" placeholder="PIN DE SEGURIDAD" class="input-group text-center tracking-widest">
+                <button onclick="handleLogin()" class="btn-main">Entrar al Sistema</button>
+            </div>
+        </div>
+
+        <!-- VISTA PRINCIPAL -->
+        <div id="view-main" class="hidden flex-1 flex flex-col">
+            <header class="p-6 border-b flex justify-between items-center bg-white sticky top-0 z-20">
+                <div>
+                    <span id="display-role" class="text-[9px] font-black text-blue-500 uppercase tracking-widest">Sector</span>
+                    <h2 id="display-folio" class="text-xl font-black text-slate-900 italic">FOLIO ---</h2>
+                </div>
+                <!-- Botón de Salir/Anular modificado -->
+                <button onclick="handleExit()" class="p-2 bg-red-50 rounded-xl text-red-500 flex items-center gap-1">
+                    <span class="text-[8px] font-bold uppercase">Salir</span>
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12"></path></svg>
+                </button>
+            </header>
+
+            <main class="p-6 space-y-6">
+                <!-- Formulario Paso 1 -->
+                <div id="form-step-1" class="hidden space-y-4">
+                    <div class="bg-slate-900 p-6 rounded-[2rem] shadow-xl">
+                        <label class="text-[10px] font-bold text-blue-400 uppercase mb-2 block">Elementos a Salir</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="in-mat" placeholder="Ej: 2 Pallets, 1 TV..." class="flex-1 bg-white/10 border-none rounded-xl p-3 text-white outline-none">
+                            <button onclick="addMaterial()" class="bg-blue-600 px-4 rounded-xl text-white font-bold">+</button>
+                        </div>
+                        <div id="mat-list" class="mt-4 flex flex-wrap gap-2"></div>
+                    </div>
+                    <input type="text" id="in-sol" class="input-group" placeholder="NOMBRE EMISOR">
+                    <input type="text" id="in-des" class="input-group" placeholder="DESTINO FINAL">
+                    <textarea id="in-causa" class="input-group h-20" placeholder="CAUSA DEL DECOMISO"></textarea>
+                </div>
+
+                <!-- Resumen (Pasos 2 y 3) -->
+                <div id="data-summary" class="hidden p-5 bg-blue-50 rounded-[2rem] border border-blue-100">
+                    <div class="grid grid-cols-2 gap-4">
+                        <div><p class="text-[9px] font-bold text-blue-400 uppercase">Emisor:</p><p id="sum-sol" class="font-bold text-slate-700 uppercase text-xs"></p></div>
+                        <div class="text-right"><p class="text-[9px] font-bold text-blue-400 uppercase">Destino:</p><p id="sum-des" class="font-bold text-slate-700 uppercase text-xs"></p></div>
+                    </div>
+                    <div class="mt-4"><p class="text-[9px] font-bold text-blue-400 uppercase mb-1">Elementos:</p><div id="sum-mats" class="flex flex-wrap gap-1"></div></div>
+                </div>
+
+                <!-- Zona de Firma -->
+                <div id="sign-box" class="hidden space-y-4">
+                    <div class="flex justify-between items-center">
+                        <span class="text-[10px] font-bold text-slate-400 uppercase">Firma de conformidad</span>
+                        <button id="btn-clear" class="text-red-500 text-[10px] font-bold px-2 py-1 bg-red-50 rounded-lg">BORRAR</button>
+                    </div>
+                    <canvas id="pad-canvas" class="signature-canvas"></canvas>
+                    <button id="btn-submit" onclick="submitStep()" class="btn-main shadow-lg shadow-blue-200">FIRMAR Y CONTINUAR</button>
+                </div>
+
+                <!-- Mensajes de Espera -->
+                <div id="wait-msg" class="hidden text-center py-10">
+                    <div class="loader mb-4"></div>
+                    <p class="text-xs font-bold text-slate-400 uppercase tracking-widest">Esperando Proceso...</p>
+                </div>
+            </main>
+        </div>
+
+        <!-- VISTA ADMIN -->
+        <div id="view-admin" class="hidden flex-1 flex flex-col">
+            <header class="p-6 border-b flex justify-between items-center bg-white">
+                <h2 class="text-xl font-black italic uppercase">Historial de Decomisos</h2>
+                <button onclick="window.location.reload()" class="text-xs font-bold text-red-500">SALIR</button>
+            </header>
+            <div id="admin-list" class="p-6 space-y-3"></div>
+        </div>
+
+        <!-- VISTA FINAL (Paso 3) -->
+        <div id="view-final" class="hidden flex-1 flex flex-col p-10 items-center justify-center text-center">
+            <div class="w-20 h-20 bg-emerald-500 text-white rounded-full flex items-center justify-center mb-6 shadow-xl">
+                <svg class="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="3" d="M5 13l4 4L19 7"></path></svg>
+            </div>
+            <h2 class="text-2xl font-black uppercase italic leading-tight">Decomiso<br>Finalizado</h2>
+            <p class="text-xs text-slate-400 font-bold uppercase mt-2">Salida autorizada y registrada</p>
+            <div class="w-full mt-10 space-y-3">
+                <button onclick="downloadPDF()" class="btn-main bg-slate-900">Descargar Comprobante PDF</button>
+                <button onclick="window.location.reload()" class="w-full py-4 text-xs font-black text-blue-600 uppercase tracking-widest border-2 border-blue-100 rounded-2xl bg-blue-50">Cerrar Sesión</button>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, doc, setDoc, getDoc, onSnapshot, collection, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyB2vX3I4ZzDJXmcTXBtKuabxDx1wKlTjf8",
+            authDomain: "pasessalida.firebaseapp.com",
+            projectId: "pasessalida",
+            storageBucket: "pasessalida.firebasestorage.app",
+            messagingSenderId: "750292585000",
+            appId: "1:750292585000:web:e809bcc68523ef81cf431d"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        
+        let userRole = null;
+        let sigPad = null;
+        let currentFolio = null;
+        let state = { folio: "", step: 1, sol: "", des: "", causa: "", mats: [], signs: {} };
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                onSnapshot(doc(db, 'pases', 'estado_actual'), (snap) => {
+                    if(snap.exists()) {
+                        currentFolio = snap.data().folio;
+                        loadPaseData();
+                    }
+                });
+            } else {
+                signInAnonymously(auth);
+            }
+        });
+
+        async function loadPaseData() {
+            if(!currentFolio) return;
+            const snap = await getDoc(doc(db, 'pases', currentFolio));
+            if(snap.exists()) {
+                state = snap.data();
+                if(userRole && userRole !== 'admin') updateUI();
+            }
+        }
+
+        // Función para salir o anular el pase si eres despacho
+        window.handleExit = async () => {
+            if (userRole === "1" && state.step === 1) {
+                // Si despacho se arrepiente, borramos el pase iniciado
+                if(confirm("¿Estás seguro de cancelar este formulario? Se borrarán los datos actuales.")) {
+                    try {
+                        await deleteDoc(doc(db, 'pases', state.folio));
+                        await setDoc(doc(db, 'pases', 'estado_actual'), { folio: null });
+                    } catch(e) { console.error(e); }
+                } else {
+                    return;
+                }
+            }
+            window.location.reload();
+        };
+
+        window.handleLogin = async () => {
+            const role = document.getElementById('login-role').value;
+            const pin = document.getElementById('login-pin').value;
+            const validPins = { "1": "0000", "2": "1111", "3": "2222", "admin": "1234" };
+
+            if(pin !== validPins[role]) return alert("PIN incorrecto");
+            userRole = role;
+
+            if(userRole === 'admin') {
+                showAdmin();
+                return;
+            }
+
+            if(userRole === "1") {
+                const globalSnap = await getDoc(doc(db, 'pases', 'estado_actual'));
+                let needNew = true;
+                if(globalSnap.exists() && globalSnap.data().folio){
+                    const p = await getDoc(doc(db, 'pases', globalSnap.data().folio));
+                    if(p.exists() && p.data().step <= 3) needNew = false;
+                }
+                if(needNew) {
+                    const newFolio = "D-" + Math.floor(1000 + Math.random() * 9000);
+                    state = { folio: newFolio, step: 1, sol: "", des: "", causa: "", mats: [], signs: {}, timestamp: Date.now() };
+                    await setDoc(doc(db, 'pases', newFolio), state);
+                    await setDoc(doc(db, 'pases', 'estado_actual'), { folio: newFolio });
+                    currentFolio = newFolio;
+                }
+            }
+
+            document.getElementById('view-login').classList.add('hidden');
+            document.getElementById('view-main').classList.remove('hidden');
+            document.getElementById('display-role').innerText = document.getElementById('login-role').options.item(role === "admin" ? 3 : role-1).text;
+            
+            const btn = document.getElementById('btn-submit');
+            if(userRole === "3") {
+                btn.innerText = "FINALIZAR DECOMISO Y DESCARGAR";
+            } else {
+                btn.innerText = "FIRMAR, MANDAR WHATSAPP Y CERRAR";
+            }
+
+            updateUI();
+        };
+
+        function updateUI() {
+            if(!state.folio) return;
+            document.getElementById('display-folio').innerText = "FOLIO " + state.folio;
+            
+            const isStep1 = state.step === 1;
+            document.getElementById('form-step-1').classList.toggle('hidden', !isStep1);
+            document.getElementById('data-summary').classList.toggle('hidden', isStep1);
+
+            if(!isStep1) {
+                document.getElementById('sum-sol').innerText = state.sol;
+                document.getElementById('sum-des').innerText = state.des;
+                document.getElementById('sum-mats').innerHTML = state.mats.map(m => `<span class="bg-blue-600 text-white px-2 py-1 rounded text-[10px] font-bold uppercase">${m}</span>`).join('');
+            }
+
+            const isMyTurn = (state.step == userRole);
+            const hasSigned = !!state.signs['step' + userRole];
+
+            document.getElementById('sign-box').classList.toggle('hidden', !isMyTurn || hasSigned);
+            document.getElementById('wait-msg').classList.toggle('hidden', isMyTurn || state.step > 3);
+
+            if(state.step > 3 && userRole === "3") {
+                document.getElementById('view-main').classList.add('hidden');
+                document.getElementById('view-final').classList.remove('hidden');
+            } else if (state.step > 3) {
+                document.getElementById('wait-msg').innerHTML = "<p class='font-bold text-emerald-500'>DECOMISO FINALIZADO POR PREVENCIÓN</p>";
+                document.getElementById('wait-msg').classList.remove('hidden');
+            }
+            
+            setTimeout(resizeCanvas, 100);
+        }
+
+        window.submitStep = async () => {
+            if(sigPad.isEmpty()) return alert("Firme para continuar");
+            const btn = document.getElementById('btn-submit');
+            btn.disabled = true;
+
+            if(state.step == 1) {
+                const sol = document.getElementById('in-sol').value.trim().toUpperCase();
+                const des = document.getElementById('in-des').value.trim().toUpperCase();
+                if(!sol || !des || state.mats.length === 0) {
+                    alert("Complete Emisor, Destino y Materiales");
+                    btn.disabled = false; return;
+                }
+                state.sol = sol;
+                state.des = des;
+                state.causa = document.getElementById('in-causa').value.trim();
+            }
+
+            state.signs['step' + state.step] = sigPad.toDataURL();
+            const currentStep = state.step;
+            state.step++;
+
+            try {
+                await setDoc(doc(db, 'pases', state.folio), state);
+                sigPad.clear();
+                
+                if(currentStep != 3) {
+                    const nextMap = { "1": "GERENCIA", "2": "PREVENCIÓN" };
+                    const msg = encodeURIComponent(`FORMULARIO DE DECOMISO ${state.folio}\nEstado: Pendiente por ${nextMap[currentStep]}\nRevisar en el sistema.`);
+                    window.open(`https://wa.me/?text=${msg}`, '_blank');
+                    
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 1500);
+                } else {
+                    updateUI();
+                }
+
+            } catch(e) {
+                alert("Error al guardar");
+                btn.disabled = false;
+            }
+        };
+
+        window.downloadPDF = () => {
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF();
+            pdf.setFillColor(15, 23, 42);
+            pdf.rect(0, 0, 210, 40, 'F');
+            pdf.setTextColor(255, 255, 255);
+            pdf.setFontSize(22);
+            pdf.text("FORMULARIO DE DECOMISO", 20, 25);
+            pdf.setTextColor(40, 40, 40);
+            pdf.setFontSize(10);
+            pdf.text(`FOLIO: ${state.folio}`, 20, 50);
+            pdf.text(`FECHA: ${new Date(state.timestamp).toLocaleString()}`, 20, 57);
+            pdf.line(20, 62, 190, 62);
+            pdf.text(`SOLICITANTE: ${state.sol}`, 20, 72);
+            pdf.text(`DESTINO: ${state.des}`, 20, 80);
+            pdf.text(`MATERIALES: ${state.mats.join(", ")}`, 20, 88);
+            if(state.causa) pdf.text(`CAUSA: ${state.causa}`, 20, 96);
+            
+            const sectors = ["DESPACHO", "GERENCIA", "PREVENCIÓN"];
+            sectors.forEach((s, i) => {
+                const x = 20 + (i * 60);
+                pdf.setFontSize(8);
+                pdf.text(s, x + 10, 130);
+                if(state.signs['step'+(i+1)]) {
+                    pdf.addImage(state.signs['step'+(i+1)], 'PNG', x, 135, 45, 20);
+                }
+            });
+            pdf.save(`Decomiso_${state.folio}.pdf`);
+        };
+
+        // Utilidades de materiales
+        window.addMaterial = () => {
+            const val = document.getElementById('in-mat').value.trim().toUpperCase();
+            if(val) {
+                state.mats.push(val);
+                document.getElementById('in-mat').value = "";
+                renderMats();
+            }
+        };
+        function renderMats() {
+            document.getElementById('mat-list').innerHTML = state.mats.map((m, i) => `
+                <div class="mat-tag">${m} <button onclick="removeMat(${i})" class="ml-1 opacity-50">×</button></div>
+            `).join('');
+        }
+        window.removeMat = (i) => { state.mats.splice(i, 1); renderMats(); };
+
+        function resizeCanvas() {
+            const canvas = document.getElementById('pad-canvas');
+            if(!canvas || canvas.offsetParent === null) return;
+            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+            canvas.width = canvas.offsetWidth * ratio;
+            canvas.height = canvas.offsetHeight * ratio;
+            canvas.getContext("2d").scale(ratio, ratio);
+        }
+
+        window.onload = () => {
+            sigPad = new SignaturePad(document.getElementById('pad-canvas'), { 
+                penColor: "#0f172a", backgroundColor: "rgba(255,255,255,0)"
+            });
+            document.getElementById('btn-clear').onclick = () => sigPad.clear();
+            window.addEventListener('resize', resizeCanvas);
+        };
+
+        function showAdmin() {
+            document.getElementById('view-login').classList.add('hidden');
+            document.getElementById('view-admin').classList.remove('hidden');
+            onSnapshot(collection(db, 'pases'), (snap) => {
+                const list = document.getElementById('admin-list');
+                list.innerHTML = "";
+                let items = [];
+                snap.forEach(d => { if(d.id !== 'estado_actual') items.push(d.data()); });
+                items.sort((a,b) => b.timestamp - a.timestamp);
+                items.forEach(p => {
+                    const div = document.createElement('div');
+                    div.className = "bg-white border p-4 rounded-2xl flex justify-between items-center";
+                    div.innerHTML = `
+                        <div><p class="font-black text-slate-800 text-sm">${p.folio}</p><p class="text-[9px] text-slate-400 uppercase font-bold">${p.sol || 'Incompleto'}</p></div>
+                        <div class="flex gap-2">
+                             <span class="text-[8px] px-2 py-1 rounded bg-slate-100 font-bold">${p.step > 3 ? 'FINAL' : 'PASO '+p.step}</span>
+                             <button onclick="downloadFromAdmin('${p.folio}')" class="p-2 bg-blue-50 text-blue-600 rounded-lg"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg></button>
+                        </div>
+                    `;
+                    list.appendChild(div);
+                });
+            });
+        }
+    </script>
+</body>
+</html>
